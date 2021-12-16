@@ -36,7 +36,7 @@
   with_nested:
           - "{{ users }}"
           - "{{ users_info }}"
-  when: item[1].authorized_keys is defined
+  when: item[1].authorized_keys is defined and item[0] != 'ansibledeploy' and item[0] == item[1].user
 
 
 - name: Remove non sudo user
