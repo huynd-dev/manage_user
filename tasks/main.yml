@@ -54,3 +54,62 @@
 - name: Deleted user removal
   user: name="{{ item }}" state=absent force=yes
   with_items: "{{users_deleted}}"
+  
+  
+  # Config log cmd
+  - name: Ubuntu | Install Rsyslog packages
+    apt:
+      name=rsyslog
+      state=present update_cache=yes
+    when: ansible_distribution == 'Ubuntu'
+
+  - name: Centos | Install Rsyslog packages
+    yum: name=rsyslog state=present update_cache=yes
+    when: ansible_distribution == 'CentOS'
+
+  - name: Change file ownership, group and permissions
+    file:
+      path: /var/log/cmdlog.log
+      owner: root
+      group: root
+      mode: "0600"
+      state: touch
+
+  - name: Add config to .bashrc
+    blockinfile:
+      path: ~/.bashrc
+      block: |
+          # Command log
+          export PROMPT_COMMAND='RETRN_VAL=0;logger -p local6.debug "[$(echo $SSH_CLIENT | cut -d" " -f1)] # $(history 1 | sed "s/^[ ]*[0-9]\+[ ]*//" )"'
+          export HISTTIMEFORMAT="%d/%m/%y %T "
+    become: yes
+    become_user: "{{item}}"
+    with_items:
+      - "{{ users }}"
+
+  - name: Get config file version
+    set_fact:
+      rsyslog_config_file: "rsyslog_{{ ansible_distribution }}_{{ansible_distribution_major_version }}.conf.j2"
+    when:
+      - ansible_distribution == item.distribution
+      - ansible_distribution_major_version == item.major_version
+    with_items:
+      - { distribution: "Ubuntu", major_version: "14" }
+      - { distribution: "Ubuntu", major_version: "16" }
+      - { distribution: "Ubuntu", major_version: "18" }
+      - { distribution: "Ubuntu", major_version: "20" }
+      - { distribution: "CentOS", major_version: "6" }
+      - { distribution: "CentOS", major_version: "7" }
+      - { distribution: "CentOS", major_version: "8" }
+
+  - name: Create backup /etc/rsyslog.conf file
+    copy:
+      src: /etc/rsyslog.conf
+      dest: /etc/rsyslog.conf.bak
+      mode: "0644"
+
+  - name: Config rsyslog
+    template:
+      src: "{{ rsyslog_config_file }}"
+      dest: /etc/rsyslog.conf
+    notify: restart rsyslog
